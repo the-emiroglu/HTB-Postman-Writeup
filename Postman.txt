@@ -1,0 +1,128 @@
+[IMG]https://imguploads.net/images/2020/03/21/1.jpg[/IMG]
+
+Merhabalar bugün sizlere Hackthebox’ta emekliye ayrılmış "Postman" makinasının çözümünü anlatacağım.
+Her makinada olduğu gibi bunda da hedef hakkında bilgi toplamak için nmap taraması ile işe başlayacağız.
+Bunun için terminalde aşağıdaki taramayı gerçekleştiriyoruz.
+
+[GREEN]nmap -sV -sC -p 1-10000 10.10.10.160[/FONT]
+
+Tabi bunun yerine aşağıdaki tarama tipide gerçekleştirilebilir. Bu tarama diğerine nazaran daha uzun sürecektir.
+biz yukarıdaki taramayla devam ediyoruz. Sonucunu hep birlikte inceleyeceğiz.
+
+[GREEN]nmap -sS -sV -sC -p- 10.10.10.160[/FONT]
+
+[IMG]https://imguploads.net/images/2020/03/21/nmap-tarama.png[/IMG]
+
+Yukarıdaki Resimde de görüldüğü gibi tarama sonucunda 995 tane port’un Closed olduğunu 5 tane port’un açık olduğunu
+nmap bize gösteriyor. Açık olan portlar;
+
+[RED]22/tcp portu üzerinde : ssh
+80/tcp portu üzerinde : http
+4444/tcp portu üzerinde : kerberos
+6379/tcp portu üzerinde : redis
+10000/tcp portu üzerinde : MiniServ 1.910 (Webmin)[/FONT]
+
+Şimdi sızma işlemine devam etmek için önce bu portları analiz etmeliyiz.
+
+[RED]22/tcp :[/FONT] Bu porttan ssh bağlantısı yapabilmemiz için sistem üzerinde yetkili olmamız gerekli. O yüzden bu portla işimiz yok şuan için.
+[RED]80/tcp :[/FONT] HTTP port open pozisyonda dolayısıyla web tarayıcı üzerinden hedef üzerinde ne var ne yok bakacağız.
+[RED]4444/tcp :[/FONT] Bu port üzerinde kerberos servisi çalışıyor fakat filtreli olduğu için üzerinde açık varmı yokmu incelememize gerek yok.
+[RED]6379/tcp :[/FONT] Port üzerinde redis servisi kurulu yüklü olan versiyon için zaafiyet varmı buna bakacağız.
+[RED]10000/tcp:[/FONT] Port üzerinde MiniServ 1.910 (Webmin) uygulaması yüklü yüklü versiyonu için zaafiyet varmı buna bakacağız.
+
+Sırayla başlayalım. Önce HTTP üzerinden 80 nolu portta ne var buna bakalım.
+
+[IMG]https://imguploads.net/images/2020/03/21/2.png[/IMG]
+
+Yukarıdaki resimde de görüldüğü üzere sayfa üzerinde bişey görünmüyor. Sitenin yapım aşamasında olduğunu söyleyen bir yazı bir yazı karşılıyor.
+[RED]"View Page Source"[/FONT] diyerek sayfanın kaynak kodlarına bakıyorum. CMS türü hakkında bilgi varmı? başka işime yarabilecek birşeyler varmı diye.
+Sonuç olarak burda da çok fazla birşey bulamıyoruz.
+
+[IMG]https://imguploads.net/images/2020/03/21/3.png[/IMG]
+
+Devam edelim. Sitede birşey bulamadığımız için herhangi bir dizin tarayıcı ile sitenin dizinlerini
+bulmak istiyorum. işime yarar başka konumlar bulabilirim belki. Bunun için [RED]dirb, dirbuster, gobuster, dirsearch[/FONT] gibi tool’lardan birini kullanabilirsiniz.
+dirb ile dirbuster kali üzeriden hazır geldiği için hızlıca terminalde açıp tarayabiliriz.
+
+[GREEN]dirb http://10.10.10.160/[/FONT]
+
+[IMG]https://imguploads.net/images/2020/03/21/4.png[/IMG]
+
+10000/tcp portu üzerinde çalışan servis ile ilgili zaafiyet taraması yapalım. Terminale aşağıdaki kodu yazarak tarama yapıyoruz.
+
+[GREEN]searchsploit webmin 1.910[/FONT]
+
+[IMG]https://imguploads.net/images/2020/03/21/5.png[/IMG]
+
+Şimdi de 6379/tcp portu üzerinde çalışan servis ile ilgili zaafiyet taraması yapalım. Redis bir veri yapısı sunucusudur.
+Açık kaynak, bellek kullanımlı, anahtar-değer deposudur. Hedef makinede SSH servisi de çalışmaktadır.
+Kali üzerinde SSH anahtar çifti oluşturulup; genel anahtar, kurban sanal makinedeki bir kullanıcının ev dizininin altında bulunan SSH dizinine (“/home/<KULLANICI_ADI>/.ssh“) atılırsa,
+Kali üzerindeki özel anahtar ile hedef sanal makineye SSH erişimi elde edilebilir.
+Redis, hedef sanal makine üzerinde “root” yetkisi ile çalıştığı için her dizine istenilen dosya yüklenebilmektedir.
+
+[IMG]https://imguploads.net/images/2020/03/21/6.png[/IMG]
+
+https://github.com/Avinash-acid/Redis-Server-Exploit üzerinde bulunan exploiti indiriyorum. Bunun için terminale
+
+[GREEN]git clone https://github.com/Avinash-acid/Redis-Server-Exploit.git[/FONT] yazıyorum
+
+[IMG]https://imguploads.net/images/2020/03/21/7.png[/IMG]
+
+Bu aracın çalışabilmesi için [RED]redis-cli[/FONT] aracını sisteme kurmamız gereklidir. [RED]redis-cli[/FONT] hedef üzerinde redis sistemi hakkında detaylı bilgi almamızı sağlar. Bunun için komut satırına 
+
+[GREEN]apt-get install redis-tools[/FONT] yazıyoruz ve tool’u yüklüyoruz.
+
+[IMG]https://imguploads.net/images/2020/03/21/8.png[/IMG]
+
+Hedef üzerindeki redis hakkında bilgiyi metasploit üzerinden de alabilirdik bunun için terminalde msfconsole ile metasploiti çağırıp
+
+[GREEN]use auxiliary/scanner/redis/redis_server
+show options
+set RHOSTS 10.10.10.160
+run[/FONT]
+
+yazdığımızda hedef hakkında yeterli bilgiyi almış olacağız. Devam edelim
+
+[IMG]https://imguploads.net/images/2020/03/21/9.png[/IMG]
+
+[GREEN]redis-cli -h 10.10.10.160[/FONT] komutu ile hedef üzerinde options ayarlarımızı yapıyoruz. [GREEN]config get dir[/FONT] ile ayarları çağırıyoruz. Metasploit teki "show options" gibi düşünebilirsiniz.
+
+[GREEN]config set dir[/FONT] yazıp anahtarın oluşturulacağı dizini [RED]"/var/lib/redis/.ssh"[/FONT] olarak seçiyoruz.
+
+[GREEN]CONFIG GET dbfilename[/FONT] yazıp db dosyasını "authorized_keys" değilse [GREEN]CONFIG SET dbfilename “authorized_keys”[/FONT] komutu ile değiştiriyoruz.
+
+[IMG]https://imguploads.net/images/2020/03/21/10.png[/IMG]
+
+Daha sonra exploitimizi [GREEN]python redis.py 10.10.10.160 redis[/FONT] komutu ile çalıştırıyoruz.
+
+[IMG]https://imguploads.net/images/2020/03/21/11.png[/IMG]
+
+şimdi artık user.txt dosyasını bulmaya geldi. linux sistem olduğu için user.txt [RED]/home/%name%/[/FONT] altında olacaktır. 
+
+[IMG]https://imguploads.net/images/2020/03/21/12.png[/IMG]
+
+Dosyayı okuyamadık yetki yükseltmemiz gerekli. [GREEN]locate id_rsa[/FONT] komutu ile dosyanın nerede olduğunu öğreniyorum /opt dizini altında [GREEN]cd /opt[/FONT] komutuyla dizine geçiyorum. [GREEN]cat id_rsa.bak[/FONT] komutu ile dosyayı okuyorum.
+
+[IMG]https://imguploads.net/images/2020/03/21/13.png[/IMG]
+
+Bu anahtar Matt isimli kullanıcının private key’i bu anahtarı kırmamız lazım ve bunun için [RED]ssh2john[/FONT] isimli tool’u kullanıcam. fakat bunun için  Private Key’i Hash formatına çevirmemiz gerekli. 
+
+[GREEN]python ssh2john id_rsa>x.hash [/FONT]komutu ile aldığım id_rsa dosysını x.hash isimli bir dosyaya hash formatında kayıt ediyorum daha sonra bu dosyayı john ile kıracağız ve elde ettiğim şifre ile tekrar ssh bağlantısı yapıp
+sisteme yetkili girip user.txt dosyasını okuyacağız.
+
+[IMG]https://imguploads.net/images/2020/03/21/15.png[/IMG]
+
+evet şifremizi aldık şimdi [GREEN]su Matt[/FONT] komutu ile sistem kullanıcı değiştiriyoruz ve şifremizi giriyoruz. daha sonrada [RED]/home/Matt[/FONT] dizinine geçip cat user.txt ile ilk flagimizi alıyoruz.
+
+[IMG]https://imguploads.net/images/2020/03/21/16.png[/IMG]
+
+Sistem de root olabilmemiz için 10000/tcp portu üzerinde bulunan webmin servisi üzerinden yetki yükseltmesi yapmamız gerekli bunun için zaafiyet taramasını zaten daha önce yapmıştık. Metasploit üzerinden sisteme girip root olacağız.
+
+msfconsole ile metasploiti açıp [GREEN]search webmin[/FONT] yazıp aratalım daha sonra 
+
+[GREEN]use exploit/linux/http/webmin_packageup_rce[/FONT] komutu ile kullanacağımız exploiti seçelim.[GREEN]show options[/FONT] dedikten sonra exploitin çalışması için elzem olan ayarları dolduralım. tüm bunların yaptıktan sonra [GREEN]run[/FONT] komutu ile
+exploiti çalıştırdığımızda sistemde root olacağız. bundan sonra yapacağımız şey root.txt dosyasını okumak.
+
+[IMG]https://imguploads.net/images/2020/03/21/17.png[/IMG]
+
+[GREEN]CW EMIROGLU[GREEN]
